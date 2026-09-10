@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dokimo-mcp"
+version = "0.1.0"
+description = "MCP server to verify AI-agent revenue claims: recompute a Merkle proof and check it against an on-chain anchor."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Augaster Technologies" }]
+keywords = ["mcp", "model-context-protocol", "x402", "agentic-payments", "merkle", "verification", "agents"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Security",
+]
+dependencies = [
+    "mcp>=1.2",
+]
+
+[project.scripts]
+dokimo-mcp = "dokimo_mcp:main"
+
+[project.urls]
+Homepage = "https://dokimo.augaster.com"
+Demo = "https://dokimo.augaster.com/agent-audits-agents.html"
+
+[tool.setuptools]
+py-modules = ["dokimo_mcp"]
