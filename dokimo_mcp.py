@@ -36,8 +36,11 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-DOKIMO_A2A = "https://dokimo.augaster.com/a2a"
-DOKIMO_AGENT_CARD = "https://dokimo.augaster.com/.well-known/agent-card.json"
+# Public Dokimo endpoints by default. Override (e.g. a self-hosted deploy pointing
+# at an internal address to avoid a hairpin) via DOKIMO_A2A_URL / DOKIMO_AGENT_CARD_URL.
+DOKIMO_A2A = os.environ.get("DOKIMO_A2A_URL", "https://dokimo.augaster.com/a2a")
+DOKIMO_AGENT_CARD = os.environ.get(
+    "DOKIMO_AGENT_CARD_URL", "https://dokimo.augaster.com/.well-known/agent-card.json")
 
 # A real User-Agent — the default Python-urllib UA is 403'd by the CDN's bot filter.
 _UA = "dokimo-mcp/0.1 (+https://dokimo.augaster.com)"
