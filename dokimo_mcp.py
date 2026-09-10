@@ -32,9 +32,11 @@ import hashlib
 import json
 import os
 import urllib.request
-from typing import Any
+from typing import Annotated, Any
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
+from pydantic import Field
 
 # Public Dokimo endpoints by default. Override (e.g. a self-hosted deploy pointing
 # at an internal address to avoid a hairpin) via DOKIMO_A2A_URL / DOKIMO_AGENT_CARD_URL.
@@ -79,8 +81,17 @@ def _get_json(url: str, timeout: float = 25.0) -> Any:
         return json.loads(resp.read())
 
 
-@mcp.tool()
-def recompute_merkle_root(leaf: str, proof_path: list) -> dict:
+@mcp.tool(annotations=ToolAnnotations(
+    title="Recompute Merkle root (local)",
+    readOnlyHint=True, idempotentHint=True, openWorldHint=False))
+def recompute_merkle_root(
+    leaf: Annotated[str, Field(description=(
+        "The raw leaf value (e.g. a JSON string like '{\"k\":\"total_assets\",\"v\":\"...\"}'). "
+        "Hashed in the leaf domain as H(0x00 ‖ leaf)."))],
+    proof_path: Annotated[list, Field(description=(
+        "Ordered Merkle proof path: a list of [sibling_hash_hex, side] pairs, where side is "
+        "\"L\" if the sibling is on the left or \"R\" if on the right. Empty list for a single-leaf tree."))],
+) -> dict:
     """Trustlessly recompute a dokimo-merkle-v1 root — LOCAL, no network, no trust.
 
     Hash ``leaf`` in the leaf domain (H(0x00 ‖ leaf)) and replay ``proof_path`` —
@@ -100,8 +111,15 @@ def recompute_merkle_root(leaf: str, proof_path: list) -> dict:
     return {"recomputed_root": acc, "merkle_scheme": MERKLE_SCHEME, "steps": len(path)}
 
 
-@mcp.tool()
-def verify_evidence_package(package: dict) -> dict:
+@mcp.tool(annotations=ToolAnnotations(
+    title="Verify evidence package (on-chain)",
+    readOnlyHint=True, idempotentHint=True, openWorldHint=True))
+def verify_evidence_package(
+    package: Annotated[dict, Field(description=(
+        "The Dokimo evidence package to verify. Required keys: 'leaf' (str), 'root' (str), "
+        "'proof_path' (list of [sibling_hash, \"L\"|\"R\"]), and 'rule_version_commitment' (str). "
+        "'close_id' (str) is optional and echoed back."))],
+) -> dict:
     """Fully verify a Dokimo evidence package against the LIVE on-chain anchor.
 
     Sends the package to Dokimo's public A2A endpoint, which recomputes the Merkle
@@ -130,7 +148,9 @@ def verify_evidence_package(package: dict) -> dict:
     return {"verified": False, "error": "no verdict artifact in A2A response", "raw": resp}
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(
+    title="Fetch Dokimo agent card",
+    readOnlyHint=True, idempotentHint=True, openWorldHint=True))
 def dokimo_agent_card() -> dict:
     """Fetch Dokimo's public A2A agent card — the discovery document describing what
     it can verify (skills, endpoints, supported A2A versions)."""
