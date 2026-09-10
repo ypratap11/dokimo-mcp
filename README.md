@@ -88,6 +88,18 @@ pkg["leaf"] = pkg["leaf"].replace("1001190933933115", "1001190933933116")
 print(d.verify_evidence_package(pkg)["verified"])   # False
 ```
 
+## Hosted / HTTP mode
+
+The default transport is **stdio** (local use). Set `MCP_TRANSPORT=http` to serve
+**MCP Streamable HTTP at `/mcp`** on `$PORT` (default 8081) with CORS — the shape
+hosted platforms like [Smithery](https://smithery.ai) require. The included
+`Dockerfile` + `smithery.yaml` (`runtime: container`) are set up for exactly this,
+so Smithery can build and host it from this repo.
+
+```bash
+MCP_TRANSPORT=http PORT=8081 dokimo-mcp     # or: docker run -p 8081:8081 <image>
+```
+
 ## What is Dokimo?
 
 Verifiable revenue infrastructure for autonomous commerce — audit-ready, independently

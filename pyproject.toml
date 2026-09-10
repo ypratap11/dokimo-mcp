@@ -17,7 +17,11 @@ classifiers = [
     "Topic :: Security",
 ]
 dependencies = [
-    "mcp>=1.2",
+    # Pinned to the 1.x line: this server uses the FastMCP API, which mcp 2.x
+    # renamed to MCPServer. Keeps a fresh container install (Smithery) on the API
+    # this code targets.
+    "mcp>=1.2,<2",
+    "uvicorn>=0.30",   # serving Streamable HTTP at /mcp for hosted (Smithery) deploys
 ]
 
 [project.scripts]

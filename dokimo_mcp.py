@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import urllib.request
 from typing import Any
 
@@ -134,8 +135,40 @@ def dokimo_agent_card() -> dict:
 
 
 def main() -> None:
-    """Console-script entry point (``dokimo-mcp``). Runs the server over stdio."""
-    mcp.run()
+    """Console-script entry point (``dokimo-mcp``).
+
+    Default transport is **stdio** (local use — Claude Desktop, IDE agents).
+    Set ``MCP_TRANSPORT=http`` (as the container image does) to serve **Streamable
+    HTTP at /mcp** on ``$PORT`` (default 8081) with CORS — the shape Smithery's
+    hosted deployments require.
+    """
+    transport = os.environ.get("MCP_TRANSPORT", "stdio").lower()
+    if transport in ("http", "streamable-http", "shttp"):
+        import uvicorn
+        from starlette.middleware.cors import CORSMiddleware
+        from mcp.server.transport_security import TransportSecuritySettings
+
+        port = int(os.environ.get("PORT", "8081"))
+        mcp.settings.host = "0.0.0.0"
+        mcp.settings.port = port
+        # DNS-rebinding protection defaults to localhost-only hosts/origins; that
+        # protects *local* servers from malicious sites. This is a public, hosted,
+        # read-only verifier (calls only public endpoints), and it sits behind a
+        # host (Smithery) that sets its own Host/Origin — so allow any.
+        mcp.settings.transport_security = TransportSecuritySettings(
+            enable_dns_rebinding_protection=False,
+        )
+        app = mcp.streamable_http_app()          # serves MCP at /mcp
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_methods=["*"],
+            allow_headers=["*"],
+            expose_headers=["mcp-session-id"],   # Smithery/browser clients need this
+        )
+        uvicorn.run(app, host="0.0.0.0", port=port)
+    else:
+        mcp.run()   # stdio
 
 
 if __name__ == "__main__":

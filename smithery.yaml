@@ -1,16 +1,17 @@
-# Smithery configuration for the Dokimo MCP server.
-# https://smithery.ai/docs
+# Smithery configuration — hosted (custom container) deployment.
+# https://smithery.ai/docs/build/deployments/custom-container
 #
-# Local (stdio) MCP server. No configuration or secrets required: its tools call
-# Dokimo's public endpoints and do a pure local Merkle recompute.
+# Smithery builds the Dockerfile and hosts the server, exposing MCP Streamable
+# HTTP at /mcp on the PORT it injects (8081). No configuration or secrets are
+# required: the tools call Dokimo's public endpoints and do a pure local Merkle
+# recompute.
+runtime: "container"
+build:
+  dockerfile: "Dockerfile"
+  dockerBuildPath: "."
 startCommand:
-  type: stdio
+  type: "http"
   configSchema:
-    type: object
+    type: "object"
     properties: {}
     required: []
-  commandFunction: |-
-    (config) => ({
-      command: "dokimo-mcp",
-      args: []
-    })
