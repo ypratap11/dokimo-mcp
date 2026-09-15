@@ -157,6 +157,72 @@ def dokimo_agent_card() -> dict:
     return _get_json(DOKIMO_AGENT_CARD)
 
 
+class UsageLogMiddleware:
+    """ASGI middleware: one JSON line per MCP JSON-RPC message on stdout.
+
+    Records the JSON-RPC ``method``, the tool ``name`` for ``tools/call`` and the
+    ``clientInfo`` from ``initialize``, so real tool use can be told apart from
+    liveness pings (initialize / tools/list). Tool ARGUMENTS are never logged.
+    Disable with ``MCP_USAGE_LOG=0``.
+    """
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
+        if scope["type"] != "http" or scope.get("method") != "POST":
+            return await self.app(scope, receive, send)
+
+        chunks, more = [], True
+        while more:
+            message = await receive()
+            if message["type"] != "http.request":   # client disconnected
+                return await self.app(scope, _replay(message, receive), send)
+            chunks.append(message.get("body", b""))
+            more = message.get("more_body", False)
+        body = b"".join(chunks)
+
+        try:
+            _log_usage(scope, body)
+        except Exception:   # logging must never break a request
+            pass
+        await self.app(scope, _replay({"type": "http.request", "body": body}, receive), send)
+
+
+def _replay(first: dict, receive: Any) -> Any:
+    """Hand the buffered message back once, then defer to the real ``receive`` so
+    streaming (SSE) responses still see the client's actual disconnect."""
+    pending = [first]
+
+    async def replay() -> dict:
+        return pending.pop() if pending else await receive()
+    return replay
+
+
+def _log_usage(scope: dict, body: bytes) -> None:
+    headers = {k.decode("latin-1").lower(): v.decode("latin-1")
+               for k, v in scope.get("headers", [])}
+    payload = json.loads(body)
+    for msg in payload if isinstance(payload, list) else [payload]:
+        if not isinstance(msg, dict) or "method" not in msg:
+            continue
+        params = msg.get("params") or {}
+        entry = {
+            "event": "mcp_request",
+            "method": msg["method"],
+            "ip": headers.get("cf-connecting-ip")
+                  or headers.get("x-forwarded-for", "").split(",")[0].strip()
+                  or (scope.get("client") or [None])[0],
+            "ua": headers.get("user-agent"),
+            "session": headers.get("mcp-session-id"),
+        }
+        if msg["method"] == "tools/call":
+            entry["tool"] = params.get("name")
+        elif msg["method"] == "initialize":
+            entry["client"] = params.get("clientInfo")
+        print(json.dumps(entry), flush=True)
+
+
 def main() -> None:
     """Console-script entry point (``dokimo-mcp``).
 
@@ -189,6 +255,8 @@ def main() -> None:
             allow_headers=["*"],
             expose_headers=["mcp-session-id"],   # Smithery/browser clients need this
         )
+        if os.environ.get("MCP_USAGE_LOG", "1") != "0":
+            app.add_middleware(UsageLogMiddleware)
         uvicorn.run(app, host="0.0.0.0", port=port)
     else:
         mcp.run()   # stdio
