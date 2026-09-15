@@ -8,6 +8,16 @@
     "source": "github"
   },
   "websiteUrl": "https://dokimo.augaster.com",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "dokimo-mcp",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ],
   "remotes": [
     {
       "type": "streamable-http",
