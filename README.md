@@ -1,5 +1,7 @@
 # dokimo-mcp
 
+<!-- mcp-name: io.github.ypratap11/dokimo-mcp -->
+
 **Give an AI agent the ability to verify another agent's revenue claims.**
 
 An [MCP](https://modelcontextprotocol.io) server exposing [Dokimo's](https://dokimo.augaster.com)
