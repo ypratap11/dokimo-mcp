@@ -223,6 +223,88 @@ def _log_usage(scope: dict, body: bytes) -> None:
         print(json.dumps(entry), flush=True)
 
 
+# --- Accept-header compatibility -----------------------------------------------
+# MCP Streamable HTTP asks clients to send BOTH `application/json` and
+# `text/event-stream` in Accept, and the SDK hard-406s anything else (its check is
+# a literal `startswith` over the comma-split header). Plenty of real clients don't
+# comply: aiohttp and requests default to `Accept: */*`, curl sends nothing at all.
+#
+# Measured on the public deploy 2026-09-19: a Python/3.11 aiohttp client at
+# 152.55.176.23 hit /mcp 17 times and was 406'd every single time, never once
+# completing a handshake.
+#
+# A client sending `*/*` *is* stating it accepts both of those types (RFC 9110
+# §12.5.1), so honouring it is spec-correct rather than a workaround. This widens
+# such a header before the transport sees it, and deliberately leaves an explicit,
+# genuinely incompatible Accept alone — `Accept: text/plain` still earns its 406,
+# because that client really cannot read what we send.
+_REQUIRED_ACCEPT = "application/json, text/event-stream"
+
+
+def _q_is_zero(params: str) -> bool:
+    """True if a media-range's parameters carry `q=0` — an explicit refusal."""
+    for param in params.split(";"):
+        key, _, value = param.partition("=")
+        if key.strip().lower() == "q":
+            try:
+                return float(value.strip()) == 0.0
+            except ValueError:
+                return False
+    return False
+
+
+def _accepts_wildcard(accept_header: str) -> bool:
+    """True if `accept_header` already grants us both required media types by wildcard.
+
+    An absent or empty header means "no preference". `*/*` covers everything;
+    `application/*` and `text/*` each cover one of the two types we need, so a client
+    offering both also qualifies. A `q=0` weight is a refusal and is not counted.
+    """
+    if not accept_header.strip():
+        return True
+
+    covers_application = covers_text = False
+    for media_range in accept_header.split(","):
+        media_type, _, params = media_range.strip().partition(";")
+        media_type = media_type.strip().lower()
+        if _q_is_zero(params):
+            continue
+        if media_type == "*/*":
+            return True
+        if media_type == "application/*":
+            covers_application = True
+        elif media_type == "text/*":
+            covers_text = True
+
+    return covers_application and covers_text
+
+
+class WidenAcceptHeader:
+    """ASGI middleware making a wildcard `Accept` explicit before the MCP transport.
+
+    Raw ASGI rather than Starlette's ``BaseHTTPMiddleware`` on purpose: this sits in
+    front of a long-lived SSE stream, and ``BaseHTTPMiddleware`` wraps responses in a
+    queue that breaks streaming.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            headers = scope["headers"]
+            accept = b", ".join(
+                value for key, value in headers if key.lower() == b"accept"
+            ).decode("latin-1")
+            if _accepts_wildcard(accept):
+                # Copy: uvicorn reuses the scope dict, so never mutate it in place.
+                scope = dict(scope)
+                scope["headers"] = [
+                    (key, value) for key, value in headers if key.lower() != b"accept"
+                ] + [(b"accept", _REQUIRED_ACCEPT.encode("latin-1"))]
+        await self.app(scope, receive, send)
+
+
 def main() -> None:
     """Console-script entry point (``dokimo-mcp``).
 
@@ -257,7 +339,10 @@ def main() -> None:
         )
         if os.environ.get("MCP_USAGE_LOG", "1") != "0":
             app.add_middleware(UsageLogMiddleware)
-        uvicorn.run(app, host="0.0.0.0", port=port)
+        # Outermost, so a wildcard Accept is widened before anything else sees it --
+        # including the transport's strict check (see WidenAcceptHeader). Header-only,
+        # so neither CORS nor the usage log above is affected.
+        uvicorn.run(WidenAcceptHeader(app), host="0.0.0.0", port=port)
     else:
         mcp.run()   # stdio
 
