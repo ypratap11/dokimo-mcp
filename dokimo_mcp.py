@@ -3,11 +3,14 @@ revenue claims.
 
 A self-contained Model Context Protocol server exposing three tools:
 
-  - ``recompute_merkle_root``  — PURE, LOCAL, trustless: recompute a
-    ``dokimo-merkle-v1`` root from a leaf + proof path, with no network and no
-    trust in anyone. The "check the math yourself" primitive.
-  - ``verify_evidence_package`` — full verification via Dokimo's public A2A
-    endpoint: recompute + on-chain anchor check, returning a signed-off verdict.
+  - ``recompute_merkle_root``  — PURE and LOCAL: recompute a
+    ``dokimo-merkle-v1`` root from a leaf + proof path in this process, with no
+    network call. The "check the math yourself" primitive; it does not check
+    the on-chain anchor.
+  - ``verify_evidence_package`` — Dokimo's check of one record via its public A2A
+    endpoint: recompute + on-chain anchor check, returning Dokimo's (unsigned)
+    verdict. This one relies on Dokimo's server; to avoid that, recompute locally
+    and read the anchor yourself (https://dokimo.augaster.com/verify.html).
   - ``dokimo_agent_card``       — fetch Dokimo's public A2A agent card.
 
 This is a thin CLIENT: it talks to Dokimo's public endpoints and implements the
@@ -16,12 +19,13 @@ It contains no proprietary code.
 
 Verification model: there is NO path to ``verified: true`` without BOTH
 (1) the caller's ``(leaf, proof_path)`` recomputing to the claimed root, AND
-(2) the compound commitment of ``(root, rule_version_commitment)`` being anchored
-on-chain. Tamper one byte → recompute fails. Swap the rule version → the compound
-commitment changes → not anchored.
+(2) the commitment of ``(root, rule_version_commitment)`` (plus, for a
+dokimo-anchor-v2 close, its ``summary``) being anchored on-chain. Tamper one byte
+→ recompute fails. Swap the rule version → the commitment changes → not anchored.
 
-Honest scope: attests that a *reported* figure is reproducible and tamper-evident
-against an on-chain anchor — not that any underlying business number is "good."
+Honest scope: for one record, checks that its proof reaches the root and that the
+commitment is anchored on-chain. It does not recompute the close's figures from
+all its records, and says nothing about whether a business number is "good."
 
 Run:  ``dokimo-mcp``  (after ``pip install dokimo-mcp``), or ``python -m dokimo_mcp``.
 Live demo the tools mirror: https://dokimo.augaster.com/agent-audits-agents.html
@@ -92,7 +96,7 @@ def recompute_merkle_root(
         "Ordered Merkle proof path: a list of [sibling_hash_hex, side] pairs, where side is "
         "\"L\" if the sibling is on the left or \"R\" if on the right. Empty list for a single-leaf tree."))],
 ) -> dict:
-    """Trustlessly recompute a dokimo-merkle-v1 root — LOCAL, no network, no trust.
+    """Recompute a dokimo-merkle-v1 root locally — no network call, no anchor check.
 
     Hash ``leaf`` in the leaf domain (H(0x00 ‖ leaf)) and replay ``proof_path`` —
     a list of ``[sibling_hash, side]`` where side is "L" or "R" — hashing internal
@@ -118,19 +122,23 @@ def verify_evidence_package(
     package: Annotated[dict, Field(description=(
         "The Dokimo evidence package to verify. Required keys: 'leaf' (str), 'root' (str), "
         "'proof_path' (list of [sibling_hash, \"L\"|\"R\"]), and 'rule_version_commitment' (str). "
-        "'close_id' (str) is optional and echoed back."))],
+        "For a dokimo-anchor-v2 close (every close anchored after the v2 cutover) also 'summary' "
+        "(the close summary) and 'binding' (the leaf's evidence binding); without them the package "
+        "is checked as legacy v1. 'close_id' (str) is optional and echoed back."))],
 ) -> dict:
-    """Fully verify a Dokimo evidence package against the LIVE on-chain anchor.
+    """Ask Dokimo to check one record of an evidence package against the on-chain anchor.
 
     Sends the package to Dokimo's public A2A endpoint, which recomputes the Merkle
-    proof AND checks the compound commitment (root + rule version) against the
-    anchor on Base. ``package`` must contain: ``leaf`` (str), ``root`` (str),
+    proof AND checks the anchored commitment (root + rule version, plus the close
+    summary for v2) against the anchor on Base. The verdict is Dokimo's answer and
+    is not signed. ``package`` must contain: ``leaf`` (str), ``root`` (str),
     ``proof_path`` (list of [sibling_hash, "L"|"R"]), and
-    ``rule_version_commitment`` (str); ``close_id`` is optional/echoed.
+    ``rule_version_commitment`` (str); for a v2 close also ``summary`` and
+    ``binding``; ``close_id`` is optional/echoed.
 
     Returns the verdict: ``{verified, checks:{recompute, onchain_anchor,
     rule_version_bound}, ...}``. ``verified`` is true only if the proof recomputes
-    AND the commitment is anchored on-chain.
+    AND the commitment is anchored on-chain. It covers this one record only.
     """
     payload = {
         "jsonrpc": "2.0", "id": "dokimo-mcp", "method": "SendMessage",

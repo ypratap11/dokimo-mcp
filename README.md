@@ -5,8 +5,8 @@
 **Give an AI agent the ability to verify another agent's revenue claims.**
 
 An [MCP](https://modelcontextprotocol.io) server exposing [Dokimo's](https://dokimo.augaster.com)
-trustless evidence verification as tools any MCP client (Claude Desktop, IDE
-agents, custom agents) can call. It's the "agent that audits agents" — as tools.
+evidence checks as tools any MCP client (Claude Desktop, IDE agents, custom
+agents) can call. It's the "agent that audits agents" — as tools.
 
 Live, clickable version of what these tools do:
 **https://dokimo.augaster.com/agent-audits-agents.html**
@@ -19,19 +19,23 @@ Live, clickable version of what these tools do:
 
 | Tool | What it does | Network? |
 |---|---|---|
-| `recompute_merkle_root(leaf, proof_path)` | **Trustless local recompute** — hash a leaf under `dokimo-merkle-v1` and replay the proof path to a root, with **no network and no trust in anyone**. Compare it to a package's claimed `root` yourself. | none |
-| `verify_evidence_package(package)` | **Full verification** via Dokimo's public A2A endpoint: recompute **and** check the compound commitment (root + rule version) against the **on-chain anchor on Base**. Returns `verified: true` only if both hold. | Dokimo A2A |
+| `recompute_merkle_root(leaf, proof_path)` | **Local recompute** — hash a leaf under `dokimo-merkle-v1` and replay the proof path to a root, in this process, with **no network call**. Compare it to a package's claimed `root` yourself. It does not check the on-chain anchor. | none |
+| `verify_evidence_package(package)` | **Dokimo's check of one record**, via its public A2A endpoint: recompute **and** check the anchored commitment (root + rule version, plus the close summary for v2 closes) against the **on-chain anchor on Base**. Returns `verified: true` only if both hold. The verdict is Dokimo's answer and is **not signed** — to avoid relying on it, recompute locally and read the anchor yourself (e.g. [/verify.html](https://dokimo.augaster.com/verify.html)). | Dokimo A2A |
 | `dokimo_agent_card()` | Fetch Dokimo's public A2A agent card — what it can verify. | Dokimo |
 
 **Verification model:** there is no path to `verified: true` without (1) the
 caller's `(leaf, proof_path)` recomputing to the claimed `root`, **and** (2) the
-compound commitment of `(root, rule_version_commitment)` being anchored on-chain.
-Tamper one byte → recompute fails. Swap the rule version → the commitment changes
-→ not anchored.
+commitment of `(root, rule_version_commitment)` — and, for a `dokimo-anchor-v2`
+close, its `summary` — being anchored on-chain. Tamper one byte → recompute fails.
+Swap the rule version → the commitment changes → not anchored. A package without
+`summary` and `binding` is checked as legacy v1, which verifies only closes
+anchored before the v2 cutover.
 
-**Honest scope:** attests that a *reported* figure is reproducible and
-tamper-evident against an on-chain anchor — not that any underlying business
-number is "good." Non-custodial; reads public on-chain state only.
+**Honest scope:** for one record, checks that its proof reaches the root and that
+the commitment is anchored on-chain. It does not recompute the close's figures
+from all its records (that needs the full package, e.g. in /verify.html), and it
+says nothing about whether a business number is "good." Non-custodial; reads
+public on-chain state only.
 
 ## Install & run
 
