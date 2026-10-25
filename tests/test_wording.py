@@ -6,7 +6,8 @@ import pathlib
 import re
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-SURFACES = ("README.md", "dokimo_mcp.py", "server.json", "glama.json", "smithery.yaml")
+SURFACES = ("README.md", "dokimo_mcp.py", "server.json", "glama.json", "smithery.yaml",
+            "skills/dokimo-verify/SKILL.md")
 BANNED = ("trustless", "no trust in", "without trusting", "signed-off", "signed verdict",
           "full verification", "fully verify")
 
@@ -35,3 +36,16 @@ def test_versions_agree():
     server = json.loads((ROOT / "server.json").read_text(encoding="utf-8"))
     versions = {server["version"], *(p["version"] for p in server.get("packages", []))}
     assert versions == {py}, (py, versions)
+
+
+def test_skill_names_real_tools_and_discloses_network_calls():
+    """The Agensi SKILL.md must name the server's real tools and disclose every
+    network call (marketplace rule: no undisclosed network calls)."""
+    skill = (ROOT / "skills/dokimo-verify/SKILL.md").read_text(encoding="utf-8")
+    src = (ROOT / "dokimo_mcp.py").read_text(encoding="utf-8")
+    assert skill.startswith("---\nname: dokimo-verify\ndescription: ")
+    for tool in ("recompute_merkle_root", "verify_evidence_package", "dokimo_agent_card"):
+        assert f"def {tool}(" in src and tool in skill, tool
+    for url in re.findall(r'"(https://dokimo\.augaster\.com/[^"]+)"', src):
+        assert url in skill, f"undisclosed network call: {url}"
+    assert "not signed" in skill and "one record" in skill.lower()
