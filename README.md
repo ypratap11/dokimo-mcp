@@ -77,6 +77,15 @@ If `dokimo-mcp` isn't on `PATH`, use the module form:
 Then ask the agent: *"Use Dokimo to verify this evidence package"* (paste one), or
 *"recompute this Merkle root and tell me if it matches."*
 
+## Agent skill
+
+[`skills/dokimo-verify/SKILL.md`](skills/dokimo-verify/SKILL.md) tells an agent when
+and how to use these tools: check the package shape, recompute locally first, ask
+before sending anything to Dokimo, and report the result for one record without
+overstating it. Drop the `dokimo-verify` folder into your agent's skills directory
+(e.g. `~/.claude/skills/` for Claude Code). It is also listed, free, on
+[Agensi](https://www.agensi.io/skills/dokimo-verify).
+
 ## Try it
 
 The live demo page embeds a real, anchored evidence package. Fetch it and verify:
