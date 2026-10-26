@@ -83,7 +83,8 @@ Then ask the agent: *"Use Dokimo to verify this evidence package"* (paste one), 
 and how to use these tools: check the package shape, recompute locally first, ask
 before sending anything to Dokimo, and report the result for one record without
 overstating it. Drop the `dokimo-verify` folder into your agent's skills directory
-(e.g. `~/.claude/skills/` for Claude Code).
+(e.g. `~/.claude/skills/` for Claude Code). It is also listed, free, on
+[Agensi](https://www.agensi.io/skills/dokimo-verify).
 
 ## Try it
 
